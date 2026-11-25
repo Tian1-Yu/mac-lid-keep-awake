@@ -49,7 +49,7 @@ if [[ $action == stop ]]; then
     fi
     : > "$state_dir/stop" || exit 1
 else
-    case $action in 5|30|60) ;; *) exit 2 ;; esac
+    [[ $action =~ ^([1-9]|[1-9][0-9]|1[01][0-9]|120)$ ]] || exit 2
     if [[ -e "$state_dir/pending" ]]; then
         printf '已有保活或恢复正在进行。请先查看状态。\n' >&2
         exit 1
@@ -228,7 +228,9 @@ exit 1
 CONTROLLER
 
     # Use a root-owned lock; it closes automatically even if this controller is killed.
-    /usr/bin/sudo -- /usr/bin/perl -MFcntl=:flock -e '
+    local -a runner=(/usr/bin/perl)
+    if [[ $EUID -ne 0 ]]; then runner=(/usr/bin/sudo -- /usr/bin/perl); fi
+    "${runner[@]}" -MFcntl=:flock -e '
         my ($dir, $controller, $action) = @ARGV;
         mkdir $dir, 0755 unless -d $dir;
         die "Cannot open state directory\n" unless -d $dir && !-l $dir && (stat($dir))[4] == 0;
@@ -240,22 +242,25 @@ CONTROLLER
     ' "$state_dir" "$controller" "$1"
 }
 
-case ${1-} in
-    '')
+if (( $# == 0 )); then
         show_status
-        printf '\n从合盖开始计时，仍合盖时到点请求睡眠。\n1. 保活 5 分钟（桌面测试）\n2. 保活 30 分钟\n3. 保活 1 小时\n4. 提前结束\n其他键退出。\n'
-        read -r -p '请选择：' choice || exit 0
-        case $choice in
-            1) action=5 ;;
-            2) action=30 ;;
-            3) action=60 ;;
-            4) action=stop ;;
-            *) exit 0 ;;
-        esac ;;
-    5|30|60|stop) action=$1 ;;
-    status) show_status; exit 0 ;;
-    *) printf '用法：%s [5|30|60|stop|status]\n' "$0" >&2; exit 2 ;;
-esac
+        printf '\n从合盖开始计时，仍合盖时到点请求睡眠。\n'
+        read -r -p '输入保活分钟数（1–120）或 stop（结束），直接回车退出：' action || exit 0
+        [[ -n $action ]] || exit 0
+elif (( $# == 1 )); then
+    action=$1
+else
+    action=invalid
+fi
+
+if [[ $action == status ]]; then
+    show_status
+    exit 0
+fi
+if [[ $action != stop && ! $action =~ ^([1-9]|[1-9][0-9]|1[01][0-9]|120)$ ]]; then
+    printf '用法：%s [分钟数 1–120|stop|status]\n' "$0" >&2
+    exit 2
+fi
 
 change_session "$action"
 result=$?

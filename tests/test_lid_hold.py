@@ -83,7 +83,7 @@ esac
     write("thermal", 0)
     write("lid", "No")
 
-    for duration in (5, 30, 60):
+    for duration in (1, 5, 30, 47, 60, 120):
         remove("sleep-requests")
         run(controller, str(duration))
         job = plistlib.loads((root / "job.plist").read_bytes())
@@ -96,7 +96,7 @@ esac
         assert read("flag").strip() == "0" and "定时已结束。 已请求立即睡眠。" in read("status")
         assert read("sleep-requests").splitlines() == ["sleep"]
         write("lid", "No")
-    print("PASS: 5/30/60 readiness, timer and one immediate sleep request while closed")
+    print("PASS: valid durations, timer and one immediate sleep request while closed")
 
     remove("sleep-requests")
     run(controller, "5")
